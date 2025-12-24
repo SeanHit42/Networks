@@ -118,6 +118,16 @@ class ChatGUI:
         popup.resizable(False, False)
         popup.grab_set()
 
+        ttk.Label(popup, text="Server address (host:port)", padding=8).pack(anchor="w", padx=12, pady=(8, 0))
+        host_frame = ttk.Frame(popup)
+        host_frame.pack(fill="x", padx=12)
+        host_entry = ttk.Entry(host_frame)
+        host_entry.insert(0, "localhost")
+        host_entry.pack(side="left", fill="x", expand=True)
+        port_entry = ttk.Entry(host_frame, width=7)
+        port_entry.insert(0, "10000")
+        port_entry.pack(side="left", padx=(6, 0))
+
         ttk.Label(popup, text="Choose a display name:", padding=8).pack(anchor="w", padx=12, pady=(8, 0))
         username_entry = ttk.Entry(popup)
         username_entry.pack(padx=12, fill="x")
@@ -125,33 +135,53 @@ class ChatGUI:
 
         def connect():
             username = username_entry.get().strip()
+            host = host_entry.get().strip() or "localhost"
+            port = port_entry.get().strip() or "10000"
+            try:
+                port_i = int(port)
+            except Exception:
+                messagebox.showerror("Error", "Port must be a number")
+                return
+
             if not username:
                 messagebox.showerror("Error", "Username cannot be empty")
                 return
 
             popup.destroy()
             self.username = username
-            self._connect_client(username)
+            self._connect_client(username, host, port_i)
 
         btn_frame = ttk.Frame(popup)
         btn_frame.pack(fill="x", pady=12, padx=12)
         ttk.Button(btn_frame, text="Connect", command=connect).pack(side="right")
         popup.bind("<Return>", lambda _: connect())
 
-    def _connect_client(self, username: str):
+    def _connect_client(self, username: str, host: str, port: int):
+        self.status_label.config(text="Connecting...", foreground="orange")
         self.client = ChatClient(
             username=username,
             on_message=self._on_message,
-            on_status=self._on_status
+            on_status=self._on_status,
+            host=host,
+            port=port,
         )
 
         threading.Thread(target=self._connect_background, daemon=True).start()
 
     def _connect_background(self):
-        success = self.client.connect()
+        success = False
+        try:
+            success = self.client.connect()
+        except Exception as e:
+            # ensure GUI shows failure
+            self.root.after(0, lambda: messagebox.showerror("Connection error", str(e)))
+
         if success:
             self.client.start_listening()
             self.root.after(0, self._enable_input)
+        else:
+            # update status if connect returned False
+            self.root.after(0, lambda: self._update_status("Disconnected"))
 
     # ---------- UI CALLBACKS ----------
 

@@ -64,10 +64,16 @@ class ChatClient:
             return True
             
         except ConnectionRefusedError:
-            print("[ERROR] Could not connect to server. Is it running?")
+            if self.on_status:
+                self.on_status("Connection refused")
+            else:
+                print("[ERROR] Could not connect to server. Is it running?")
             return False
         except Exception as e:
-            print(f"[ERROR] Connection failed: {e}")
+            if self.on_status:
+                self.on_status(f"Connection failed: {e}")
+            else:
+                print(f"[ERROR] Connection failed: {e}")
             return False
     
     def _listener_thread_func(self):
