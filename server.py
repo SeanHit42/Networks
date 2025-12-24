@@ -2,7 +2,7 @@ import threading
 import socket
 from typing import Dict, Optional
 
-HOST = "localhost"
+HOST = "0.0.0.0"
 PORT = 10000
 BUFFER_SIZE = 1024
 
@@ -18,7 +18,7 @@ class ChatServer:
         
     def start(self):
         """Start the server and begin accepting connections."""
-        try:
+        try:    
             self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             self.server_socket.bind((self.host, self.port))
