@@ -1,20 +1,37 @@
 import threading
 import socket
 import sys
-from typing import Optional
+from typing import Optional, Callable
 
 class ChatClient:
-    """A robust chat client with automatic reconnection and message handling."""
-    
+    """A chat client with optional callback hooks for GUIs.
+
+    Backwards compatible: if callbacks are not provided this behaves like
+    the original console client (prints to stdout and prompts for username).
+    """
+
     HOST = "localhost"
     PORT = 10000
     BUFFER_SIZE = 1024
-    
-    def __init__(self, username: Optional[str] = None):
+
+    def __init__(
+        self,
+        username: Optional[str] = None,
+        on_message: Optional[Callable[[str], None]] = None,
+        on_status: Optional[Callable[[str], None]] = None,
+        host: Optional[str] = None,
+        port: Optional[int] = None,
+    ):
         self.username = username
         self.socket: Optional[socket.socket] = None
         self.is_connected = False
         self.listener_thread: Optional[threading.Thread] = None
+        self.on_message = on_message
+        self.on_status = on_status
+        if host:
+            self.HOST = host
+        if port:
+            self.PORT = port
         
     def connect(self) -> bool:
         """Establish connection to the server."""
@@ -24,14 +41,26 @@ class ChatClient:
             
             # Receive welcome message and respond with username
             welcome_msg = self.socket.recv(self.BUFFER_SIZE).decode('utf-8')
-            print(f"[SERVER] {welcome_msg}")
-            
+            if self.on_message:
+                self.on_message(f"[SERVER] {welcome_msg}")
+            else:
+                print(f"[SERVER] {welcome_msg}")
+
             if not self.username:
-                self.username = input(">>> Enter your username: ").strip()
-            
+                # CLI fallback
+                try:
+                    self.username = input(">>> Enter your username: ").strip()
+                except Exception:
+                    self.username = "anonymous"
+
+            # send username to server
             self.socket.send(self.username.encode('utf-8'))
             self.is_connected = True
-            print(f"[CONNECTED] Successfully connected as '{self.username}'")
+            status_msg = f"Connected as {self.username}"
+            if self.on_status:
+                self.on_status(status_msg)
+            else:
+                print(f"[CONNECTED] Successfully connected as '{self.username}'")
             return True
             
         except ConnectionRefusedError:
@@ -47,11 +76,19 @@ class ChatClient:
             while self.is_connected:
                 data = self.socket.recv(self.BUFFER_SIZE).decode('utf-8')
                 if not data:
-                    print("\n[DISCONNECTED] Server closed the connection.")
+                    # server closed
+                    if self.on_status:
+                        self.on_status("Disconnected")
+                    else:
+                        print("\n[DISCONNECTED] Server closed the connection.")
                     self.is_connected = False
                     break
-                print(f"\n[MESSAGE] {data}")
-                print(">>> ", end="", flush=True)
+
+                if self.on_message:
+                    self.on_message(data)
+                else:
+                    print(f"\n[MESSAGE] {data}")
+                    print(">>> ", end="", flush=True)
                 
         except OSError:
             # Normal shutdown - socket closed
@@ -72,7 +109,10 @@ class ChatClient:
         """Send a message to the server."""
         try:
             if not self.is_connected or not self.socket:
-                print("[ERROR] Not connected to server.")
+                if self.on_status:
+                    self.on_status("Not connected")
+                else:
+                    print("[ERROR] Not connected to server.")
                 return False
             
             self.socket.send(message.encode('utf-8'))
@@ -90,7 +130,10 @@ class ChatClient:
                 self.socket.close()
             except:
                 pass
-        print("[DISCONNECTED] Client shut down.")
+        if self.on_status:
+            self.on_status("Disconnected")
+        else:
+            print("[DISCONNECTED] Client shut down.")
     
     def run_interactive(self):
         """Run the client in interactive mode."""
