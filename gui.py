@@ -95,6 +95,20 @@ class ChatGUI:
         )
         self.send_button.pack(side="right")
 
+        # Debug log panel
+        log_frame = ttk.LabelFrame(self.root, text="Debug Log", padding=6)
+        log_frame.pack(fill="x", padx=10, pady=(0, 10))
+        self.debug_log = tk.Text(
+            log_frame,
+            height=4,
+            state="disabled",
+            wrap="word",
+            font=("Courier", 8),
+            bg="#1e1e1e",
+            fg="#00ff00"
+        )
+        self.debug_log.pack(fill="both", expand=True)
+
         # Connect popup
         self._show_connect_popup()
 
@@ -116,7 +130,7 @@ class ChatGUI:
 
         ttk.Label(frame, text="Server IP:").pack(anchor="w", pady=(8, 0))
         ip_entry = ttk.Entry(frame)
-        ip_entry.insert(0, "localhost")
+        ip_entry.insert(0, "192.168.1.212")  # Change to actual server IP
         ip_entry.pack(fill="x")
 
         ttk.Label(frame, text="Port:").pack(anchor="w", pady=(8, 0))
@@ -176,9 +190,20 @@ class ChatGUI:
             0,
             lambda: self._append_message(f"[{timestamp}] {message}")
         )
+        self.root.after(0, lambda: self._append_debug(f"MSG: {message}"))
 
     def _on_status(self, status: str):
         self.root.after(0, lambda: self._update_status(status))
+        self.root.after(0, lambda: self._append_debug(f"STATUS: {status}"))
+
+    def _append_debug(self, text: str):
+        try:
+            self.debug_log.configure(state="normal")
+            self.debug_log.insert("end", text + "\n")
+            self.debug_log.see("end")
+            self.debug_log.configure(state="disabled")
+        except Exception:
+            pass
 
     def _append_message(self, message: str):
         self.chat_box.configure(state="normal")

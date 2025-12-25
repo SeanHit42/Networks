@@ -35,6 +35,11 @@ class ChatClient:
     def connect(self) -> bool:
         try:
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.socket.settimeout(5)  # 5 second connection timeout
+            
+            if self.on_status:
+                self.on_status(f"Connecting to {self.host}:{self.port}...")
+            
             self.socket.connect((self.host, self.port))
 
             # Receive welcome message
@@ -46,18 +51,29 @@ class ChatClient:
             if not self.username:
                 raise ValueError("Username must be provided")
 
-            # Send username to server
-            self.socket.send(self.username.encode("utf-8"))
+            # Send username to server (use sendall for full delivery)
+            self.socket.sendall(self.username.encode("utf-8"))
             self.is_connected = True
+            self.socket.settimeout(None)  # Switch to blocking mode for listening
 
             if self.on_status:
-                self.on_status(f"Connected to {self.host}:{self.port} as {self.username}")
+                self.on_status(f"Connected as {self.username}")
 
             return True
 
+        except ConnectionRefusedError:
+            if self.on_status:
+                self.on_status("Connection refused - is server running on that IP/port?")
+            self.is_connected = False
+            return False
+        except socket.timeout:
+            if self.on_status:
+                self.on_status("Connection timed out - check server IP and firewall")
+            self.is_connected = False
+            return False
         except Exception as e:
             if self.on_status:
-                self.on_status(f"Connection failed: {e}")
+                self.on_status(f"Connection failed: {type(e).__name__}: {e}")
             self.is_connected = False
             return False
 
