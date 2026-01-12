@@ -1,0 +1,11 @@
+msg_id,app_protocol,src_app,dst_app,message,timestamp
+1,HTTP,client_browser,web_server,GET /index.html,0.015
+2,HTTP,web_server,client_browser,200 OK (text/html),0.042
+3,HTTP,client_browser,web_server,GET /style.css,0.110
+4,HTTP,web_server,client_browser,200 OK (text/css),0.135
+5,HTTP,client_browser,web_server,GET /logo.png,0.250
+6,HTTP,web_server,client_browser,200 OK (image/png),0.290
+7,HTTP,client_browser,web_server,POST /login,1.050
+8,HTTP,web_server,client_browser,302 Found (Redirect),1.085
+9,HTTP,client_browser,web_server,GET /dashboard,1.150
+10,HTTP,web_server,client_browser,404 Not Found,1.200
