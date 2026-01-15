@@ -10,11 +10,14 @@ class ChatGUI:
     def __init__(self, root: tk.Tk):
         self.root = root
         self.root.title("TCP Network Chat")
-        self.root.geometry("720x500")
-        self.root.minsize(650, 450)
+        self.root.geometry("920x500")
+        self.root.minsize(850, 450)
 
         self.client: ChatClient | None = None
         self.username: str | None = None
+        self.online_users: list[str] = []
+        self.mention_popup: tk.Toplevel | None = None
+        self.mention_listbox: tk.Listbox | None = None
 
         self._setup_style()
         self._build_ui()
@@ -59,15 +62,18 @@ class ChatGUI:
         )
         self.status_label.pack(side="right")
 
-        # Main container (chat + input)
+        # Main container (chat + users list)
         main_frame = ttk.Frame(self.root)
         main_frame.pack(fill="both", expand=True, padx=10, pady=(5, 10))
 
-        # Chat area with larger height
-        chat_label = ttk.Label(main_frame, text="Messages:", font=("Segoe UI", 9, "bold"))
+        # Left side: Chat area
+        left_frame = ttk.Frame(main_frame)
+        left_frame.pack(side="left", fill="both", expand=True, padx=(0, 10))
+
+        chat_label = ttk.Label(left_frame, text="Messages:", font=("Segoe UI", 9, "bold"))
         chat_label.pack(anchor="w", pady=(0, 4))
 
-        chat_frame = ttk.Frame(main_frame)
+        chat_frame = ttk.Frame(left_frame)
         chat_frame.pack(fill="both", expand=True)
 
         self.chat_box = tk.Text(
@@ -80,12 +86,37 @@ class ChatGUI:
         )
         self.chat_box.pack(side="left", fill="both", expand=True)
 
+        # Configure text tags for different message types
+        self.chat_box.tag_configure("private_msg", foreground="#FF6B6B", font=("Segoe UI", 10, "bold"))
+        self.chat_box.tag_configure("system_msg", foreground="#6C63FF", font=("Segoe UI", 9, "italic"))
+        self.chat_box.tag_configure("normal_msg", foreground="#000000")
+        self.chat_box.tag_configure("timestamp", foreground="#888888", font=("Segoe UI", 8))
+        self.chat_box.tag_configure("own_msg", foreground="#4CAF50", font=("Segoe UI", 10, "bold"))
+
         scrollbar = ttk.Scrollbar(chat_frame, command=self.chat_box.yview)
         scrollbar.pack(side="right", fill="y")
         self.chat_box.config(yscrollcommand=scrollbar.set)
 
+        # Right side: Online Users List
+        right_frame = ttk.LabelFrame(self.root, text="Online Users", padding=8)
+        right_frame.pack(side="right", fill="y", padx=(0, 10), pady=(15, 10))
+
+        self.users_listbox = tk.Listbox(
+            right_frame,
+            font=("Segoe UI", 10),
+            width=15,
+            height=20,
+            bg="#f0f0f0",
+            selectmode="single"
+        )
+        self.users_listbox.pack(fill="both", expand=True)
+
+        users_scrollbar = ttk.Scrollbar(right_frame, command=self.users_listbox.yview)
+        users_scrollbar.pack(side="right", fill="y", before=self.users_listbox)
+        self.users_listbox.config(yscrollcommand=users_scrollbar.set)
+
         # Input area - more prominent
-        input_label = ttk.Label(main_frame, text="Your message:", font=("Segoe UI", 9, "bold"))
+        input_label = ttk.Label(main_frame, text="Your message (use @username for private):", font=("Segoe UI", 9, "bold"))
         input_label.pack(anchor="w", pady=(10, 4))
 
         input_frame = ttk.Frame(main_frame)
@@ -97,6 +128,7 @@ class ChatGUI:
         )
         self.message_entry.pack(side="left", fill="x", expand=True, padx=(0, 8))
         self.message_entry.bind("<Return>", self._send_message_event)
+        self.message_entry.bind("<KeyRelease>", self._on_message_entry_change)
 
         self.send_button = tk.Button(
             input_frame,
@@ -269,22 +301,25 @@ class ChatGUI:
     def _on_message(self, message: str):
         timestamp = datetime.datetime.now().strftime("%H:%M:%S")
         
-        # Parse message format "username: message" or system messages "[SYSTEM] ..."
-        formatted_message = message
-        if not message.startswith("["):
-            # Regular message from another user
-            if ": " in message:
-                sender, msg_content = message.split(": ", 1)
-                formatted_message = f"[{timestamp}] {sender}: {msg_content}"
-            else:
-                formatted_message = f"[{timestamp}] {message}"
-        else:
-            # System message
-            formatted_message = f"[{timestamp}] {message}"
+        # Check if it's a user list update (format: "USERS|user1,user2,user3")
+        if message.startswith("USERS|"):
+            users_str = message[6:]  # Remove "USERS|" prefix
+            self.online_users = [u.strip() for u in users_str.split(",") if u.strip() and u.strip() != self.username]
+            self.root.after(0, self._update_users_list)
+            return
+        
+        # Determine message type and apply appropriate styling
+        is_private = False
+        is_system = message.startswith("[")
+        
+        if not is_system:
+            # Check if it's a private message (format: "username (private):" or "@username:")
+            if " (private):" in message or message.startswith("@"):
+                is_private = True
         
         self.root.after(
             0,
-            lambda: self._append_message(formatted_message)
+            lambda: self._append_message_styled(message, is_private=is_private, is_system=is_system, timestamp=timestamp)
         )
         self.root.after(0, lambda: self._append_debug(f"MSG: {message}"))
 
@@ -301,7 +336,24 @@ class ChatGUI:
         except Exception:
             pass
 
+    def _append_message_styled(self, message: str, is_private: bool = False, is_system: bool = False, timestamp: str = ""):
+        self.chat_box.configure(state="normal")
+        
+        if timestamp and not is_system:
+            self.chat_box.insert("end", f"[{timestamp}] ", "timestamp")
+        
+        if is_private:
+            self.chat_box.insert("end", message + "\n", "private_msg")
+        elif is_system:
+            self.chat_box.insert("end", message + "\n", "system_msg")
+        else:
+            self.chat_box.insert("end", message + "\n", "normal_msg")
+        
+        self.chat_box.configure(state="disabled")
+        self.chat_box.see("end")
+
     def _append_message(self, message: str):
+        """Legacy method for backward compatibility"""
         self.chat_box.configure(state="normal")
         self.chat_box.insert("end", message + "\n")
         self.chat_box.configure(state="disabled")
@@ -317,6 +369,105 @@ class ChatGUI:
     def _enable_input(self):
         self.send_button.config(state="normal")
 
+    def _update_users_list(self):
+        """Update the online users listbox"""
+        try:
+            self.users_listbox.delete(0, "end")
+            for user in sorted(self.online_users):
+                self.users_listbox.insert("end", user)
+        except Exception as e:
+            self._append_debug(f"Error updating users list: {e}")
+
+    def _on_message_entry_change(self, event):
+        """Handle @ mention autocomplete"""
+        text = self.message_entry.get()
+        
+        # Close popup if text is empty or no @ found
+        if not text or "@" not in text:
+            self._close_mention_popup()
+            return
+        
+        # Find the @ mention pattern
+        at_index = text.rfind("@")
+        if at_index == -1 or (at_index > 0 and text[at_index - 1].isalnum()):
+            self._close_mention_popup()
+            return
+        
+        # Get text after @
+        text_after_at = text[at_index + 1:]
+        parts = text_after_at.split()
+        
+        # Close popup if nothing after @
+        if not parts:
+            self._close_mention_popup()
+            return
+        
+        mention_text = parts[0]
+        
+        # Filter matching users
+        matching_users = [u for u in self.online_users if u.lower().startswith(mention_text.lower())]
+        
+        if not matching_users:
+            self._close_mention_popup()
+            return
+        
+        # Show popup with suggestions
+        self._show_mention_popup(matching_users, at_index)
+
+    def _show_mention_popup(self, users: list[str], at_index: int):
+        """Show a popup with user suggestions"""
+        if self.mention_popup and self.mention_popup.winfo_exists():
+            self.mention_listbox.delete(0, "end")
+            for user in users:
+                self.mention_listbox.insert("end", user)
+        else:
+            self.mention_popup = tk.Toplevel(self.root)
+            self.mention_popup.wm_overrideredirect(True)
+            
+            self.mention_listbox = tk.Listbox(
+                self.mention_popup,
+                font=("Segoe UI", 9),
+                height=min(5, len(users)),
+                width=20
+            )
+            self.mention_listbox.pack()
+            
+            # Position popup near entry field
+            self.message_entry.update_idletasks()
+            x = self.message_entry.winfo_rootx()
+            y = self.message_entry.winfo_rooty() + self.message_entry.winfo_height()
+            self.mention_popup.geometry(f"+{x}+{y}")
+            
+            # Bind selection
+            self.mention_listbox.bind("<Button-1>", lambda e: self._select_mention(self.mention_listbox.curselection(), at_index))
+            self.mention_listbox.bind("<Return>", lambda e: self._select_mention(self.mention_listbox.curselection(), at_index))
+
+    def _close_mention_popup(self):
+        """Close the mention popup"""
+        if self.mention_popup and self.mention_popup.winfo_exists():
+            self.mention_popup.destroy()
+            self.mention_popup = None
+            self.mention_listbox = None
+
+    def _select_mention(self, selection, at_index: int):
+        """Insert selected mention into message entry"""
+        if not selection:
+            return
+        
+        selected_user = self.mention_listbox.get(selection[0])
+        text = self.message_entry.get()
+        
+        # Replace @ mention with @username
+        before = text[:at_index]
+        after = text[self.message_entry.index("insert"):]
+        new_text = f"{before}@{selected_user} {after}"
+        
+        self.message_entry.delete(0, "end")
+        self.message_entry.insert(0, new_text)
+        self.message_entry.icursor(len(f"{before}@{selected_user} "))
+        
+        self._close_mention_popup()
+
     # ---------- SEND ----------
 
     def _send_message_event(self, _):
@@ -331,12 +482,20 @@ class ChatGUI:
             return
 
         timestamp = datetime.datetime.now().strftime("%H:%M:%S")
-        self.root.after(
-            0,
-            lambda: self._append_message(f"[{timestamp}] {self.username} (You): {message}")
-        )
+        
+        # Check if it's a private message (starts with @)
+        is_private = message.startswith("@")
+        
+        if is_private:
+            display_msg = f"[{timestamp}] You (private): {message}"
+            self.root.after(0, lambda: self._append_message_styled(display_msg, is_private=True))
+        else:
+            display_msg = f"[{timestamp}] {self.username} (You): {message}"
+            self.root.after(0, lambda: self._append_message(display_msg))
+        
         self.client.send_message(message)
         self.message_entry.delete(0, "end")
+        self._close_mention_popup()
 
     # ---------- CLOSE ----------
 

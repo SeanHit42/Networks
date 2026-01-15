@@ -122,6 +122,11 @@ class ChatServer:
                 self.clients[client_socket] = username
 
             print(f"[USER JOINED] {username} from {client_address}")
+            
+            # Broadcast updated user list to all clients
+            self._broadcast_user_list()
+            
+            # Notify others
             self.broadcast(f"[SYSTEM] {username} joined the chat", exclude=client_socket)
 
             # Message loop
@@ -132,13 +137,54 @@ class ChatServer:
 
                 message = data.decode("utf-8")
                 print(f"[{username}] {message}")
-                self.broadcast(f"{username}: {message}", exclude=client_socket)
+                
+                # Check if it's a private message (starts with @)
+                if message.startswith("@"):
+                    self._handle_private_message(username, message)
+                else:
+                    self.broadcast(f"{username}: {message}", exclude=client_socket)
 
         except Exception as e:
             print(f"[ERROR] {username or 'Unknown'}: {e}")
 
         finally:
             self._disconnect_client(client_socket)
+
+    def _handle_private_message(self, sender: str, message: str):
+        """Handle private messages (format: @username message)"""
+        parts = message.split(" ", 1)
+        if len(parts) < 2:
+            return
+        
+        recipient_name = parts[0][1:]  # Remove @ symbol
+        msg_content = parts[1]
+        
+        with self.lock:
+            for client_socket, username in self.clients.items():
+                if username == recipient_name:
+                    try:
+                        private_msg = f"@{sender} (private): {msg_content}"
+                        client_socket.send(private_msg.encode("utf-8"))
+                        print(f"[PRIVATE] {sender} -> {recipient_name}: {msg_content}")
+                    except:
+                        pass
+                    break
+            else:
+                # User not found
+                print(f"[PRIVATE ERROR] {sender} tried to message {recipient_name} but user not found")
+
+    def _broadcast_user_list(self):
+        """Send the current list of online users to all clients"""
+        with self.lock:
+            usernames = ",".join(self.clients.values())
+        
+        message = f"USERS|{usernames}"
+        with self.lock:
+            for client in self.clients.keys():
+                try:
+                    client.send(message.encode("utf-8"))
+                except:
+                    pass
 
     # ---------- BROADCAST ----------
 
@@ -160,6 +206,8 @@ class ChatServer:
         if username:
             print(f"[USER LEFT] {username}")
             self.broadcast(f"[SYSTEM] {username} left the chat")
+            # Broadcast updated user list to remaining clients
+            self._broadcast_user_list()
 
         try:
             client_socket.close()
