@@ -269,7 +269,20 @@ class ChatGUI:
             popup.destroy()
             self._connect_client(username, host, port_int)
 
-        ttk.Button(frame, text="Connect", command=connect).pack(pady=8)
+        join_button = tk.Button(
+            frame,
+            text="🚀 Join Chat",
+            font=("Segoe UI", 12, "bold"),
+            bg="#4CAF50",
+            fg="white",
+            activebackground="#45a049",
+            command=connect,
+            width=20,
+            padx=15,
+            pady=8
+        )
+        join_button.pack(pady=12)
+        popup.bind("<Return>", lambda _: connect())
         popup.bind("<Return>", lambda _: connect())
 
         username_entry.focus()
