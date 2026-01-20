@@ -167,7 +167,7 @@ class ChatGUI:
     def _show_connect_popup(self):
         popup = tk.Toplevel(self.root)
         popup.title("Connect to Server")
-        popup.geometry("450x360")
+        popup.geometry("450x420")
         popup.resizable(False, False)
         popup.grab_set()
 
@@ -269,19 +269,19 @@ class ChatGUI:
             popup.destroy()
             self._connect_client(username, host, port_int)
 
-        join_button = tk.Button(
+        join_btn = tk.Button(
             frame,
-            text="🚀 Join Chat",
-            font=("Segoe UI", 12, "bold"),
+            text="Join Chat",
+            font=("Segoe UI", 11, "bold"),
             bg="#4CAF50",
             fg="white",
             activebackground="#45a049",
             command=connect,
-            width=20,
-            padx=15,
-            pady=8
+            width=15,
+            padx=10,
+            pady=6
         )
-        join_button.pack(pady=12)
+        join_btn.pack(pady=12)
         popup.bind("<Return>", lambda _: connect())
         popup.bind("<Return>", lambda _: connect())
 
