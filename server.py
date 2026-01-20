@@ -112,7 +112,7 @@ class ChatServer:
         username = None
         try:
             # Welcome + username
-            client_socket.send(b"Welcome! Please enter your username")
+            client_socket.send(b"Welcome to Chatty!\n")
             username = client_socket.recv(BUFFER_SIZE).decode("utf-8").strip()
 
             if not username:
@@ -144,6 +144,19 @@ class ChatServer:
                 else:
                     self.broadcast(f"{username}: {message}", exclude=client_socket)
 
+        except ConnectionResetError:
+            print(f"[DISCONNECT] {username or 'Unknown'} has disconnected")
+        except ConnectionAbortedError:
+            print(f"[DISCONNECT] {username or 'Unknown'} has disconnected")
+        except BrokenPipeError:
+            print(f"[DISCONNECT] {username or 'Unknown'} has disconnected")
+        except OSError as e:
+            # OSError covers many socket-related issues
+            error_str = str(e).lower()
+            if any(keyword in error_str for keyword in ["connection reset", "broken pipe", "connection aborted", "forcibly closed"]):
+                print(f"[DISCONNECT] {username or 'Unknown'} has disconnected")
+            else:
+                print(f"[ERROR] {username or 'Unknown'}: {e}")
         except Exception as e:
             print(f"[ERROR] {username or 'Unknown'}: {e}")
 

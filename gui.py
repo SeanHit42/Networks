@@ -18,6 +18,7 @@ class ChatGUI:
         self.online_users: list[str] = []
         self.mention_popup: tk.Toplevel | None = None
         self.mention_listbox: tk.Listbox | None = None
+        self.user_initiated_disconnect: bool = False
 
         self._setup_style()
         self._build_ui()
@@ -53,6 +54,14 @@ class ChatGUI:
             text="TCP Network Chat",
             style="Header.TLabel"
         ).pack(side="left")
+
+        self.disconnect_button = ttk.Button(
+            header,
+            text="Disconnect",
+            command=self._disconnect_from_server,
+            state="disabled"
+        )
+        self.disconnect_button.pack(side="right", padx=(10, 0))
 
         self.status_label = ttk.Label(
             header,
@@ -373,14 +382,37 @@ class ChatGUI:
         self.chat_box.see("end")
 
     def _update_status(self, status: str):
+        # Override status if user initiated disconnect
+        if self.user_initiated_disconnect:
+            if any(keyword in status.lower() for keyword in ["disconnected", "client disconnected"]):
+                status = f"{self.username} disconnected from server"
+                self.user_initiated_disconnect = False
+        
         self.status_label.config(text=status)
         if status.lower().startswith("connected"):
             self.status_label.config(foreground="green")
+            self.disconnect_button.config(state="normal")
         else:
             self.status_label.config(foreground="red")
+            self.disconnect_button.config(state="disabled")
 
     def _enable_input(self):
         self.send_button.config(state="normal")
+        self.disconnect_button.config(state="normal")
+
+    def _disconnect_from_server(self):
+        """Disconnect from server and show connect popup again"""
+        self.user_initiated_disconnect = True
+        if self.client:
+            self.client.disconnect()
+        
+        # Disable send button and enable disconnect button will be disabled in _update_status
+        self.send_button.config(state="disabled")
+        self.message_entry.config(state="normal")
+        self.message_entry.delete(0, "end")
+        
+        # Show connect popup again
+        self._show_connect_popup()
 
     def _update_users_list(self):
         """Update the online users listbox"""
